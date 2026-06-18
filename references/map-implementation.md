@@ -57,6 +57,57 @@ const DistrictMap = ({ data, theme }) => {
 }
 ```
 
+### Stale closures in event handlers
+
+If event handlers (`.on('click', ...)`, `.on('mousemove', ...)`) are
+attached inside a `useEffect` whose dependency array is intentionally
+narrow — e.g. `[geographies]` only, to avoid re-binding listeners on
+every data/frame change — those handlers close over whatever
+props/state existed when the effect last ran, and silently stop seeing
+later updates. This is easy to hit and easy to miss: the map still
+re-renders with new fill colors (a separate effect handles that), but
+the tooltip or click handler keeps reporting data from the first render.
+
+Fix: read current values through a `ref` that's updated on every
+relevant change, not through the closure.
+
+```tsx
+const yearDataRef = useRef(yearData)
+
+useEffect(() => {
+  yearDataRef.current = yearData // keep ref current on every change
+  // ... re-color paths, update aria-labels, etc.
+}, [yearData])
+
+useEffect(() => {
+  // handlers attached once — read yearDataRef.current, never yearData directly
+  svg.selectAll('path').on('mousemove', (event, d) => {
+    const result = yearDataRef.current[d.id]
+    // ...
+  })
+}, [geographies])
+```
+
+### React + D3 overlays
+
+Don't render React JSX children inside the same `<svg>` that D3 calls
+`.selectAll().join()` against — React's declarative reconciliation and
+D3's direct DOM writes will fight over the same children. If you need
+to layer a React-rendered element on top (a focus ring, a highlight, an
+annotation), render it in a separate sibling `<svg>` with the same
+`viewBox` and `pointer-events: none`, stacked on top with CSS:
+
+```tsx
+<div style={{ position: 'relative' }}>
+  <svg ref={svgRef} viewBox={viewBox} /> {/* D3-owned */}
+  {focusedShape && (
+    <svg viewBox={viewBox} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+      <path d={focusedShape} fill="none" stroke="#18140f" strokeWidth={2} />
+    </svg>
+  )}
+</div>
+```
+
 ---
 
 ## Pattern B — React Owns the DOM
@@ -205,6 +256,11 @@ useEffect(() => {
 | US Counties | `https://cdn.jsdelivr.net/npm/us-atlas@3/counties-10m.json` |
 | Congressional Districts | Census Bureau TIGER shapefiles — convert with mapshaper |
 
+`d3.geoAlbersUsa()` automatically insets Alaska and Hawaii at reduced
+scale in the standard bottom-left position — this satisfies "all 50
+states visible" for free. No manual repositioning logic needed; that's
+only necessary if you're using a projection other than `geoAlbersUsa`.
+
 ### Converting Census Shapefiles to TopoJSON
 
 ```bash
@@ -213,6 +269,73 @@ npm install -g mapshaper
 
 # Convert shapefile to GeoJSON then TopoJSON
 mapshaper cb_2023_us_cd118_500k.shp -simplify 10% -o format=topojson districts.json
+```
+
+---
+
+## Margin-Based Color Scales
+
+When coloring states by win margin rather than just winner-take-all,
+the choice of scale matters more than it looks like it should.
+
+### Continuous diverging scales collapse toward the midpoint
+
+A continuous 3-stop diverging scale (e.g. red → purple → blue,
+interpolated by margin) looks reasonable in isolation but reads as
+"everything is purple" once real data is applied — most real-world
+election margins cluster closer to the midpoint than to the extremes,
+so a linear interpolation puts most states in the muddy middle of the
+scale where hue discrimination is weakest.
+
+Two alternatives that hold up better:
+
+**Discrete threshold bands** — hard cutoffs instead of a gradient:
+
+```ts
+import { scaleThreshold } from 'd3-scale'
+
+const colorScale = scaleThreshold<number, string>()
+  .domain([-15, -5, 5, 15])             // 4 breakpoints → 5 bands
+  .range(['#9c1c1c', '#cf8f80', '#9c8bc4', '#86a9d6', '#1f4e8c'])
+  // strong R, lean R, toss-up, lean D, strong D
+```
+
+**Bivariate hue + intensity** — hue encodes the winner, a white-to-color
+ramp encodes how decisive the margin was, so a 1-point win and a
+40-point landslide are both "red" but look nothing alike:
+
+```ts
+import { interpolateRgb } from 'd3-interpolate'
+
+const MAX_MARGIN = 40
+const redScale = interpolateRgb('#f7f2e6', '#b3242d')
+const blueScale = interpolateRgb('#f7f2e6', '#1f5fa8')
+
+function marginColor(margin: number): string {
+  const t = Math.sqrt(Math.min(Math.abs(margin) / MAX_MARGIN, 1))
+  // sqrt curve front-loads differentiation in the common 0-25pt range,
+  // not just at landslide extremes
+  return margin >= 0 ? blueScale(t) : redScale(t)
+}
+```
+
+### Generate legends from the real color function
+
+Don't hand-pick separate legend swatch colors that are meant to match
+the scale — sample the actual `marginColor`/`colorScale` function at
+several points and build the legend (swatches or a gradient) from
+those samples. Otherwise the legend silently drifts out of sync the
+next time the scale changes.
+
+```ts
+function marginGradientCss(steps = 40): string {
+  const stops: string[] = []
+  for (let i = 0; i <= steps; i++) {
+    const margin = -MAX_MARGIN + (i / steps) * (2 * MAX_MARGIN)
+    stops.push(`${marginColor(margin)} ${(i / steps) * 100}%`)
+  }
+  return `linear-gradient(to right, ${stops.join(', ')})`
+}
 ```
 
 ---

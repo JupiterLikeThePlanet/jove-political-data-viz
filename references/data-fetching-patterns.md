@@ -204,6 +204,68 @@ export const nbcComparisonAdapter = (raw: NBCRawResponse): ComparisonGroup[] => 
 }
 ```
 
+### CSV Data Adapter
+
+Historical election data is frequently distributed as CSV (state
+election boards, Census, MIT Election Lab), not JSON, and has failure
+modes the JSON adapters above never hit:
+
+- A naive `line.split(',')` breaks on any quoted field containing a
+  comma — e.g. a state name like `"Washington, D.C."`, which is valid
+  CSV but not valid input to a plain split.
+- Some files have a BOM (byte-order-mark) character on the header row
+  (`﻿State` instead of `State`), which breaks a direct key lookup like
+  `row.State` unless the file is read as `utf-8-sig` or the BOM is
+  stripped first.
+- Vote counts are often formatted as comma-separated thousands,
+  sometimes only in some rows (`"93,007"` vs `96373`) — strip commas
+  before `Number()`/`parseFloat`, don't assume one format throughout.
+- Real source files can simply have bad data — duplicate rows, blank
+  trailing lines. Dedupe defensively (e.g. by a unique key per row)
+  rather than trusting row count.
+
+```ts
+function parseCsvLine(line: string): string[] {
+  const fields: string[] = []
+  let current = ''
+  let inQuotes = false
+  for (const char of line) {
+    if (inQuotes) {
+      if (char === '"') inQuotes = false
+      else current += char
+    } else if (char === '"') {
+      inQuotes = true
+    } else if (char === ',') {
+      fields.push(current)
+      current = ''
+    } else {
+      current += char
+    }
+  }
+  fields.push(current)
+  return fields
+}
+
+function numberFrom(raw: string): number {
+  return Number(raw.replace(/,/g, '')) // strip thousands separators
+}
+
+export function csvElectionAdapter(text: string) {
+  const cleaned = text.replace(/^﻿/, '').trim() // strip BOM if present
+  const lines = cleaned.split('\n').filter(l => l.trim().length > 0)
+  const header = parseCsvLine(lines[0]).map(h => h.trim())
+
+  const seen = new Set<string>()
+  return lines.slice(1).flatMap(line => {
+    const values = parseCsvLine(line)
+    const row = Object.fromEntries(header.map((key, i) => [key, (values[i] ?? '').trim()]))
+    if (seen.has(row.Abbreviation)) return [] // defend against duplicate rows
+    seen.add(row.Abbreviation)
+    return [{ ...row, votes: numberFrom(row.Votes) }]
+  })
+}
+```
+
 ---
 
 ## Stale Data Indicator

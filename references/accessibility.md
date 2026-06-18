@@ -51,6 +51,27 @@ Clickable paths, bars, and map regions must be keyboard accessible:
 />
 ```
 
+### Pattern A (D3-owned DOM)
+
+The example above is React-rendered (Pattern B). When D3 owns the DOM
+directly (see map-implementation.md Pattern A), `<path>` elements still
+need `tabindex` and a `keydown` handler attached explicitly — a `<path>`
+never receives a synthetic click from Enter/Space the way `<button>` or
+`<a>` do, so a component can look keyboard-accessible (it has
+`tabindex`) while the keyboard is actually inert:
+
+```ts
+svg.selectAll('path')
+  .attr('tabindex', 0)
+  .attr('aria-label', d => `${d.name}: ${d.candidate} leading at ${d.margin}%`)
+  .on('click', (event, d) => onSelect(d.id))
+  .on('keydown', (event: KeyboardEvent, d) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    onSelect(d.id)
+  })
+```
+
 Tooltips must not be hover-only. Keyboard focus should trigger the same
 information that hover triggers. Use aria-live for dynamically revealed content:
 
@@ -181,3 +202,39 @@ In Tailwind:
 ```tsx
 className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
 ```
+
+### Choropleths and other variable-fill-color maps
+
+The examples above assume a fixed background. A choropleth's fill color
+is data-driven and varies per state across the full color scale — a
+single outline color verified against one swatch is not verified
+against the map. Check contrast against your scale's full range, not
+just one example fill: a ring that hits 16:1 against a pale toss-up
+color can drop to ~3:1 or below against a deep saturated landslide
+color.
+
+Preferred fix: a single solid dark ring (e.g. `#18140f` or your theme's
+ink/text color), verified against the darkest fill in your scale. This
+keeps the map visually clean and is sufficient for most light-background
+map styles.
+
+```css
+.state-path:focus-visible {
+  outline: 2px solid #18140f;
+  outline-offset: 1px;
+}
+```
+
+Fallback for dark map backgrounds or styles that require it: a two-tone
+ring (light outer + dark inner), since no single solid color can pass
+3:1 contrast against both very light and very dark fills at once. Draw
+it as two stroked paths rather than a CSS outline:
+
+```tsx
+<path d={focusedShape} fill="none" stroke="#ffffff" strokeWidth={4} />
+<path d={focusedShape} fill="none" stroke="#18140f" strokeWidth={1.5} />
+```
+
+If using D3 to own the DOM (Pattern A), render this overlay in a
+separate sibling `<svg>` rather than as a child of the D3-managed one —
+see map-implementation.md, "React + D3 overlays."
