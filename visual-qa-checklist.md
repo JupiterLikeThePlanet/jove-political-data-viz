@@ -63,7 +63,9 @@ This checklist is for human judgment — no automated test covers all of it.
 - [ ] Legend accurately describes the color scale shown
 
 ### Tooltip
-- [ ] Appears on state hover with state name, winning candidate, and margin
+- [ ] Appears on state hover with state name and **all candidates'**
+  percentages (not just the winner) and the margin — a user comparing
+  states needs to see how close the losing side was, not only who won
 - [ ] Disappears cleanly when mouse leaves the state
 - [ ] Does not overlap neighboring states or get clipped at map edges
 

@@ -57,6 +57,19 @@ const DistrictMap = ({ data, theme }) => {
 }
 ```
 
+### Verify dataset contents, don't assume them
+
+Any claim about what is or isn't present in a topology/geo dataset
+(e.g. "DC isn't in the states topology," "this file has no territories")
+must be verified against the actual file before being coded as a
+comment or conditional — not asserted from general knowledge or a
+half-remembered fact about the dataset. A false assumption like this is
+easy to act on confidently and hard to notice is wrong, because the
+workaround built on top of it (a manual marker, a special-cased branch)
+will run without erroring — it just produces a wrong result silently.
+Fetch the file and check (`topology.objects.<name>.geometries.find(g => g.id === ...)`)
+before writing code that depends on a feature being present or absent.
+
 ### Stale closures in event handlers
 
 If event handlers (`.on('click', ...)`, `.on('mousemove', ...)`) are
