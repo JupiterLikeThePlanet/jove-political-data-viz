@@ -377,7 +377,7 @@ Every generated component must include:
 - Empty/no-data state
 - Hover tooltip where applicable
 - ARIA labels on SVG elements
-- Responsive width handling via ResizeObserver or parentRef
+- Responsive width handling via ParentSize from @visx/responsive — see references/chart-patterns.md
 
 If multi-source — include:
 - Per-source error state

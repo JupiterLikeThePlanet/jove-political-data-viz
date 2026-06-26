@@ -197,6 +197,34 @@ Pass as theme prop:
 <NationalChoropleth data={data} theme={colorblindTheme} />
 ```
 
+### Text on colored chart elements
+
+When text labels appear directly on colored bars or SVG elements (exit
+polls, grouped bars, stacked charts), gray muted text fails against
+solid party colors. White text on the bar is the correct default.
+
+```tsx
+// Default: white on the colored bar. Hovered row: dark ink.
+<text fill={isHovered ? theme.text : '#ffffff'}>
+  {group.label}
+</text>
+```
+
+Do not use SVG text stroke (`paintOrder: 'stroke fill'`, `strokeWidth`)
+to create contrast. Stroke bleeds into the counters and narrow strokes of
+small letterforms (10–12px), smearing the text. The fill-swap approach
+is cleaner and accessible.
+
+Pair with a row opacity state so non-hovered rows dim and the active row
+stays clearly distinct:
+
+```tsx
+const barOpacity = hoveredLabel === null || isHovered ? 1 : 0.45
+<rect fillOpacity={barOpacity} />
+```
+
+---
+
 ### Never use color alone
 
 Always pair color with at least one of:
