@@ -166,6 +166,51 @@ const StateMap = ({ data, theme, width = 800, height = 500 }) => {
 }
 ```
 
+### Small multiples
+
+When rendering multiple maps in a grid (one per year, decade, or race),
+compute a single `pathGenerator` from the full geography set and share it
+across all panels. Each panel running its own `fitSize` call risks subtle
+scale differences if data ever varies between panels.
+
+```tsx
+const pathGenerator = useMemo(() => {
+  if (geographies.length === 0) return null
+  const projection = geoAlbersUsa().fitSize([panelWidth, panelHeight], {
+    type: 'FeatureCollection',
+    features: geographies,
+  } as never)
+  return geoPath(projection)
+}, [geographies, panelWidth, panelHeight])
+```
+
+Use `<figure>`/`<figcaption>` for each panel — the correct semantic
+element for a self-contained unit of content with a caption:
+
+```tsx
+<figure style={{ margin: 0 }}>
+  <svg viewBox={`0 0 ${width} ${height}`} width="100%" role="img" aria-labelledby={titleId}>
+    <title id={titleId}>US election results, {decadeLabel}</title>
+    {/* paths */}
+  </svg>
+  <figcaption style={{ textAlign: 'center' }}>{decadeLabel}</figcaption>
+</figure>
+```
+
+Use `repeat(auto-fit, minmax(260px, 1fr))` for the grid rather than
+fixed breakpoint classes. Auto-fit handles any panel count and any
+container width without knowing the breakpoint in advance:
+
+```tsx
+<div style={{
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+  gap: 24,
+}}>
+  {panels.map(p => <SmallMultiplePanel key={p.id} {...p} />)}
+</div>
+```
+
 ---
 
 ## react-simple-maps (Pattern B shortcut)

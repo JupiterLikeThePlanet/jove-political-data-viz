@@ -72,6 +72,79 @@ svg.selectAll('path')
   })
 ```
 
+### Toggle states and rich labels
+
+Use `aria-pressed` when a path acts as a toggle (selected/deselected):
+
+```tsx
+<path
+  role="button"
+  tabIndex={0}
+  aria-pressed={isSelected}
+  aria-label={describeFeature(feature, decadeLabel)}
+  onClick={() => onSelect(feature.id)}
+  onKeyDown={e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(feature.id) }
+  }}
+>
+  <title>{describeFeature(feature, decadeLabel)}</title>
+</path>
+```
+
+The `<title>` child duplicates `aria-label` intentionally — some screen
+readers do not process `aria-label` on SVG `<path>` elements and fall
+back to `<title>` instead.
+
+Compute label strings with a dedicated helper rather than inline template
+literals. Inline strings get long and go stale silently when the data
+shape changes:
+
+```ts
+function describeFeature(f: DecadeGeoFeature, decadeLabel: string): string {
+  if (f.dominantParty === 'no-data') {
+    return `${f.state}: no presidential election data in the ${decadeLabel}.`
+  }
+  if (f.dominantParty === 'tie') {
+    return `${f.state}: split evenly in the ${decadeLabel} — ${f.demWins}D, ${f.repWins}R (${f.electionYears.join(', ')}).`
+  }
+  const party = f.dominantParty === 'D' ? 'Democratic' : 'Republican'
+  const wins = f.dominantParty === 'D' ? f.demWins : f.repWins
+  return `${f.state}: ${party} won ${wins} of ${f.totalElections} elections in the ${decadeLabel} (${f.electionYears.join(', ')}).`
+}
+```
+
+### Selection state announcements
+
+When a click selects or highlights something across multiple panels,
+announce the change with a dedicated `aria-live` region:
+
+```tsx
+<div aria-live="polite" style={{ minHeight: 20 }}>
+  {selectedState
+    ? `Tracing ${selectedState} across all panels. Click it again or press Escape to clear.`
+    : 'Click any state to trace its partisan lean across all decades.'}
+</div>
+```
+
+The idle text tells screen reader users what's interactive before they've
+found it. The selected text confirms the action and explains how to undo it.
+
+### Escape key for dismissing selections
+
+Any click-to-select interaction must also support Escape. Register a
+document-level listener alongside any click-outside handler, and clean
+it up when the selection clears — otherwise a global listener stays
+attached permanently:
+
+```tsx
+useEffect(() => {
+  if (!selectedState) return
+  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelectedState(null) }
+  document.addEventListener('keydown', onKey)
+  return () => document.removeEventListener('keydown', onKey)
+}, [selectedState])
+```
+
 Tooltips must not be hover-only. Keyboard focus should trigger the same
 information that hover triggers. Use aria-live for dynamically revealed content:
 

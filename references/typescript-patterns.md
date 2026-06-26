@@ -72,6 +72,36 @@ export const resolveTheme = (theme?: Partial<ElectionTheme>): ElectionTheme => (
 })
 ```
 
+### Map-specific theme extensions
+
+The base `ElectionTheme` covers chart and party colors. Choropleth and
+small-multiples maps need additional tokens for no-data states, ties,
+and highlight/dim interactions. Extend rather than replace:
+
+```ts
+export type MapTheme = ElectionTheme & {
+  noData: string          // fill for states with missing data
+  tie: string             // fill for tied states (equal D/R wins)
+  highlightStroke: string // stroke color on the selected state
+  dimmedOpacity: number   // opacity of non-selected states (0–1)
+}
+
+export const defaultMapTheme: MapTheme = {
+  ...defaultTheme,
+  noData: '#9ca3af',
+  tie: '#7b5ea7',
+  highlightStroke: '#18140f',
+  dimmedOpacity: 0.25,
+}
+```
+
+Map components accept `theme?: Partial<MapTheme>` so consumers can
+override individual tokens without replacing the whole object:
+
+```tsx
+<DecadeChoroplethGrid dataset={dataset} theme={{ republican: '#8b0000' }} />
+```
+
 ### Using theme in a component
 
 ```tsx
