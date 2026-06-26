@@ -87,6 +87,15 @@ It will ask a few questions before generating any code.
 
 ---
 
+## Contributing
+
+This project is open source and actively welcoming contributions. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for the full guide — what to contribute,
+how to test the skill, how to write a PR, and the current backlog of proposed
+additions.
+
+---
+
 ## License
 
 MIT — Jupiter Baudot (jove) 2025
