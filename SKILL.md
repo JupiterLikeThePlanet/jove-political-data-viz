@@ -160,8 +160,8 @@ type ComparisonGroup = {
 **Use when:** Showing distribution of electoral votes, senate seats, or
 house seats. Simple proportional display.
 **Trigger phrases:** "electoral votes", "seat count", "distribution", "donut", "pie"
-**Library:** Recharts (simple) or Visx (production)
-**Model:** Haiku 4.5 (Recharts) / Sonnet 4.6 (Visx)
+**Library:** Recharts (simple, static) or Visx (production, any hover state)
+**Model:** Haiku 4.5 (Recharts, static only) / Sonnet 4.6 (Visx, any hover state)
 **Data shape:**
 ```ts
 type DistributionSlice = {
@@ -170,6 +170,9 @@ type DistributionSlice = {
   color?: string     // hex color — provide or skill will apply defaults
 }
 ```
+**Note:** If building with Visx and hover tooltips, the tooltip must render
+outside `ParentSize` using `position: fixed` — see references/chart-patterns.md
+Tooltip Positioning section. Do not use `TooltipWithBounds` inside `ParentSize`.
 **Test case:** "Show the current electoral college breakdown as a donut chart."
 
 ---

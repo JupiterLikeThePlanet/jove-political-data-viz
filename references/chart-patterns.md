@@ -174,6 +174,145 @@ for each side must point toward the axis, not away from it.
 
 ---
 
+## Tooltip Positioning
+
+`ParentSize` renders its internal wrapper with `overflow: hidden` for measurement
+purposes. Any `position: absolute` child inside it — including `TooltipWithBounds`
+from `@visx/tooltip` — is silently clipped to the container boundary and never
+visible outside it. Additionally, `position: absolute` elements take up space in
+the normal document flow even when visually positioned elsewhere, which can
+displace surrounding layout.
+
+**Never render a tooltip inside `ParentSize`.**
+
+The correct pattern for all Visx interactive charts: capture `e.clientX /
+e.clientY` (viewport coordinates) on mouse events, store in plain React state,
+render a `position: fixed` div at the component's top level outside `ParentSize`.
+This escapes all container overflow constraints, never affects document flow, and
+eliminates the coordinate-space mismatch that comes from mixing `localPoint()`
+SVG-local coordinates with a `position: absolute` ancestor.
+
+```tsx
+type TooltipState = {
+  label: string
+  value: number | string
+  x: number   // e.clientX
+  y: number   // e.clientY
+} | null
+
+// State lives in the parent component (outside ParentSize):
+const [tooltip, setTooltip] = useState<TooltipState>(null)
+
+// Callbacks passed into InnerChart:
+const handleHover = (label: string, value: number, e: React.MouseEvent) => {
+  setTooltip({ label, value, x: e.clientX, y: e.clientY })
+}
+const handleMove = (label: string, value: number, e: React.MouseEvent) => {
+  setTooltip(t => t ? { ...t, x: e.clientX, y: e.clientY } : t)
+}
+const handleLeave = () => setTooltip(null)
+
+// On interactive SVG elements inside InnerChart:
+onMouseEnter={e => onHover(label, value, e)}
+onMouseMove={e => onMove(label, value, e)}
+onMouseLeave={onLeave}
+
+// Rendered outside ParentSize, inside the component wrapper:
+{tooltip && (
+  <div
+    style={{
+      position: 'fixed',
+      top: tooltip.y - 44,
+      left: tooltip.x + 12,
+      zIndex: 9999,
+      pointerEvents: 'none',
+      background: '#18140f',
+      color: '#f5f0e8',
+      padding: '6px 10px',
+      borderRadius: 4,
+      fontSize: 12,
+      whiteSpace: 'nowrap',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+    }}
+  >
+    <div style={{ fontWeight: 700 }}>{tooltip.label}</div>
+    <div style={{ color: '#b5a99a' }}>{tooltip.value}</div>
+  </div>
+)}
+```
+
+Offset `top: y - 44` places the tooltip above the cursor. Adjust the offset
+based on tooltip height. Use `left: x + 12` to keep it from sitting directly
+under the cursor.
+
+---
+
+## Re-trigger Animation on Data Change
+
+To replay a CSS `transition` when data changes — for example, when a dataset
+toggle fires and the bars should animate in with the new values — bump a
+`renderKey` counter and split the reset/play into two separate hooks.
+
+A single `requestAnimationFrame` inside one `useEffect` does **not** work.
+RAF fires before paint, not after. React may batch both state updates (`false`
+then `true`) in the same paint cycle, so the browser never renders the reset
+state and the transition has nothing to animate from.
+
+The correct two-hook pattern:
+
+```tsx
+import { useState, useEffect, useLayoutEffect } from 'react'
+
+// renderKey is incremented by the parent on every toggle
+function InnerChart({ data, renderKey }: { data: ..., renderKey: number }) {
+  const [visible, setVisible] = useState(true)
+
+  // useLayoutEffect fires synchronously after DOM mutation, before paint.
+  // This guarantees the browser commits the reset state (scaleY(0)) to
+  // screen before the RAF fires.
+  useLayoutEffect(() => {
+    if (renderKey === 0) return
+    setVisible(false)
+  }, [renderKey])
+
+  // useEffect fires after paint. The RAF here triggers after the first
+  // paint with visible=false, giving the CSS transition a real start
+  // state to animate from.
+  useEffect(() => {
+    if (renderKey === 0) return
+    const raf = requestAnimationFrame(() => setVisible(true))
+    return () => cancelAnimationFrame(raf)
+  }, [renderKey])
+
+  // Apply to bars via inline style:
+  // style={{
+  //   transform: visible ? 'scaleY(1)' : 'scaleY(0)',
+  //   opacity: visible ? 1 : 0,
+  //   transition: visible
+  //     ? `transform 0.5s cubic-bezier(0.4,0,0.2,1) ${delay}, opacity 0.4s ease ${delay}`
+  //     : 'none',
+  // }}
+}
+```
+
+Start `useState(true)` (visible) so bars are shown immediately on first render.
+`renderKey === 0` guards prevent the animation from firing on initial mount.
+
+In the parent, bump `renderKey` whenever the dataset changes:
+
+```tsx
+const [active, setActive] = useState<'national' | 'battleground'>('national')
+const [renderKey, setRenderKey] = useState(0)
+
+const handleToggle = (next: typeof active) => {
+  if (next === active) return
+  setActive(next)
+  setRenderKey(k => k + 1)
+}
+```
+
+---
+
 ## Rolling Average for Noisy Time-Series Data
 
 For polling data (or any noisy time series), render a smoothed trend line
