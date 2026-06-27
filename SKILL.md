@@ -10,7 +10,7 @@ license: MIT
 metadata:
   author: Jupiter Baudot
   version: 1.0.0
-  github: https://github.com/JupiterLikeThePlanet/claude-skill-political-data-viz
+  github: https://github.com/JupiterLikeThePlanet/jove-political-data-viz
   signature: jove
 ---
 
